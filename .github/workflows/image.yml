@@ -1,0 +1,75 @@
+name: Build and release images
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+
+    container: ghcr.io/openwrt/tools:openwrt-23.05
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout master directory
+        uses: actions/checkout@v3
+        with:
+          path: openwrt
+      
+      - name: Restore config
+        working-directory: openwrt
+        run: cp .github/image.config .config
+      
+      - name: Fix permission
+        run: chown -R buildbot:buildbot openwrt
+      
+      - name: Run make defconfig
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: make defconfig
+
+      - name: Build everything
+        shell: su buildbot -c "sh -e {0}"
+        working-directory: openwrt
+        run: make -j$(nproc) BUILD_LOG=1 || ret=$? .github/workflows/scripts/show_build_failures.sh
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: build-output
+          path: openwrt/bin/targets/mediatek/filogic
+
+
+  release:
+    name: Create Release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout master directory
+        uses: actions/checkout@v3
+        with:
+          path: openwrt
+
+      - name: Download build output
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+          path: build-output
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: ${{ github.workspace }}/openwrt/.github/image-readme.md
+          files: |
+            build-output/openwrt-*-initramfs-kernel.bin
