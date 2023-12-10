@@ -3,6 +3,7 @@
 ## Supported devices
 
  - TUF-AX4200
+ - TUF-AX6000
 
 
 ## Instructions
